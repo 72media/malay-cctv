@@ -93,6 +93,14 @@
   .layer-header strong { font-size:16px; font-weight:800; }
   .layer-close { width:30px; height:30px; border-radius:50%; background:#f1f5f9; border:none; font-size:14px; color:var(--muted); cursor:pointer; }
   .layer-panel h4 { margin:4px 0 -4px; font-size:11px; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); }
+  .bd-list { display:flex; flex-direction:column; gap:6px; }
+  .bd-opt { display:flex; align-items:center; gap:10px; padding:9px 10px; border:1.5px solid #e2e8f0; border-radius:12px; background:#f8fafc; cursor:pointer; font-size:13px; font-weight:600; color:#475569; }
+  .bd-opt input { width:16px; height:16px; accent-color:var(--brand-dark); flex:0 0 auto; }
+  .bd-opt .sw { width:22px; height:0; border-top:3px solid; flex:0 0 auto; }
+  .bd-opt small { display:block; font-weight:500; color:var(--muted); font-size:11px; }
+  .bd-opt:has(input:checked) { border-color:var(--brand-dark); background:#f0f9ff; color:var(--brand-dark); }
+  .bd-note { font-size:11px; color:var(--muted); min-height:14px; }
+  .bd-tip { font-family:inherit; font-size:12px; font-weight:600; padding:3px 8px; }
   .base-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; }
   .base-opt { position:relative; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px; padding:10px 4px; border:1.5px solid #e2e8f0; border-radius:12px; background:#f8fafc; text-align:center; cursor:pointer; }
   .base-opt input { position:absolute; opacity:0; pointer-events:none; }
@@ -224,6 +232,12 @@
         <label class="base-opt"><input type="radio" name="base" value="osm"><span class="bo-ic">🗺️</span><span class="bo-tx">ถนน</span></label>
         <label class="base-opt"><input type="radio" name="base" value="dark"><span class="bo-ic">🌃</span><span class="bo-tx">โหมดมืด</span></label>
       </div>
+      <h4>ขอบเขต</h4>
+      <div class="bd-list">
+        <label class="bd-opt"><input type="checkbox" data-bd="state"><span class="sw" style="border-color:#f43f5e"></span><span>ขอบเขตรัฐสลังงอร์</span></label>
+        <label class="bd-opt"><input type="checkbox" data-bd="district"><span class="sw" style="border-color:#facc15"></span><span>เขตอำเภอ (Daerah)<small>9 เขต ตรงกับตัวกรองเขตกล้อง</small></span></label>
+      </div>
+      <div class="bd-note" id="bd-note"></div>
     </div>
   </div>
 
@@ -315,6 +329,46 @@ document.getElementById('reset-btn').addEventListener('click',()=>{
 document.querySelectorAll('input[name="base"]').forEach(r=>r.addEventListener('change',e=>{
   [osm,googleHybrid,esriDark].forEach(l=>map.removeLayer(l));
   ({osm,google:googleHybrid,dark:esriDark})[e.target.value].addTo(map);
+}));
+
+/* ขอบเขต: เขตอำเภอสลังงอร์ (sempadan_daerah_2021 · JPS Selangor) และขอบรัฐที่รวมจากเขตเหล่านั้น */
+const BD_URL='data/selangor-boundary.json';
+const BD_STYLE={
+  state:{color:'#f43f5e',weight:3,opacity:.95,fill:false},
+  district:{color:'#facc15',weight:2,opacity:.95,fill:true,fillOpacity:0}
+};
+const BD_LAYERS={}; let BD_DATA=null, BD_PROMISE=null;
+function loadBoundary(){
+  if(BD_DATA) return Promise.resolve(BD_DATA);
+  if(!BD_PROMISE) BD_PROMISE=fetchJSON(BD_URL,20000).then(j=>(BD_DATA=j)).catch(e=>{ BD_PROMISE=null; throw e; });
+  return BD_PROMISE;
+}
+function makeBoundary(key){
+  const interactive=key!=='state';
+  const lyr=L.geoJSON(BD_DATA[key],{
+    style:BD_STYLE[key], interactive,
+    onEachFeature:(f,l)=>{
+      if(!interactive) return;
+      const name=f.properties.name+(f.properties.no?' · เขต '+f.properties.no:'');
+      l.bindTooltip(name,{sticky:true,className:'bd-tip'});
+      l.on('mouseover',()=>l.setStyle({fillOpacity:.15}));
+      l.on('mouseout',()=>l.setStyle({fillOpacity:0}));
+    }
+  });
+  return lyr;
+}
+document.querySelectorAll('input[data-bd]').forEach(cb=>cb.addEventListener('change',async e=>{
+  const key=e.target.dataset.bd, note=document.getElementById('bd-note');
+  if(!e.target.checked){ if(BD_LAYERS[key]) map.removeLayer(BD_LAYERS[key]); return; }
+  note.textContent='กำลังโหลดขอบเขต...';
+  try{
+    await loadBoundary();
+    if(!BD_LAYERS[key]) BD_LAYERS[key]=makeBoundary(key);
+    if(e.target.checked) BD_LAYERS[key].addTo(map);
+    // เรียงชั้น: ขอบรัฐอยู่บนสุด
+    ['district','state'].forEach(k=>{ if(BD_LAYERS[k]&&map.hasLayer(BD_LAYERS[k])) BD_LAYERS[k].bringToFront(); });
+    note.textContent='';
+  }catch(err){ e.target.checked=false; note.textContent='โหลดขอบเขตไม่สำเร็จ: '+err.message; }
 }));
 
 /* =========================================================
