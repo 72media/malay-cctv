@@ -13,6 +13,7 @@ export async function onRequestGet({ params }) {
   try {
     const r = await fetch(UPSTREAM + id, {
       headers: { accept: 'application/json' },
+      signal: AbortSignal.timeout(10000),
       cf: { cacheTtl: 60, cacheEverything: true },
     });
     return new Response(r.body, {
@@ -29,4 +30,3 @@ export async function onRequestGet({ params }) {
     });
   }
 }
-
