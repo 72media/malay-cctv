@@ -33,6 +33,8 @@
   .hd-top { display:flex; align-items:center; justify-content:space-between; gap:10px; min-height:34px; }
   #clock { font-size:13px; font-weight:500; opacity:.92; }
   #sidebar header h1 { font-size:26px; line-height:1.1; margin:0; font-weight:800; letter-spacing:.5px; }
+.fb-link { display:inline-block; vertical-align:middle; margin-left:6px; padding:3px 10px; border-radius:20px; background:rgba(255,255,255,.2); border:1px solid rgba(255,255,255,.35); color:#fff; font-size:12px; font-weight:600; letter-spacing:0; text-decoration:none; white-space:nowrap; }
+  .fb-link:hover { background:rgba(255,255,255,.35); }
   .hd-sub { font-size:12.5px; opacity:.92; }
   #refresh { background:rgba(255,255,255,.2); border:1px solid rgba(255,255,255,.3); color:#fff; border-radius:8px; padding:6px 12px; font-size:13px; font-weight:600; cursor:pointer; white-space:nowrap; }
   #refresh:hover { background:rgba(255,255,255,.3); }
@@ -177,7 +179,7 @@
           <div id="clock">กำลังโหลดเวลา...</div>
           <button id="refresh" title="โหลดข้อมูลกล้องใหม่">⟳ โหลดใหม่</button>
         </div>
-        <h1>Selangor-CCTV</h1>
+        <h1>Selangor-CCTV <a class="fb-link" href="https://www.facebook.com/hs8tv" target="_blank" rel="noopener">FB ผู้พัฒนา</a></h1>
         <div class="hd-sub">กล้องภาพนิ่งสถานการณ์น้ำ รัฐสลังงอร์ (มาเลเซีย) · JPS Selangor</div>
       </header>
       <div class="action-bar">
@@ -218,8 +220,8 @@
       <div class="layer-header"><strong>ชั้นข้อมูล</strong><button class="layer-close" id="layer-close">✕</button></div>
       <h4>แผนที่พื้นฐาน</h4>
       <div class="base-grid">
-        <label class="base-opt"><input type="radio" name="base" value="osm" checked><span class="bo-ic">🗺️</span><span class="bo-tx">ถนน</span></label>
-        <label class="base-opt"><input type="radio" name="base" value="google"><span class="bo-ic">🛰️</span><span class="bo-tx">ดาวเทียม</span></label>
+        <label class="base-opt"><input type="radio" name="base" value="google" checked><span class="bo-ic">🛰️</span><span class="bo-tx">ดาวเทียม</span></label>
+        <label class="base-opt"><input type="radio" name="base" value="osm"><span class="bo-ic">🗺️</span><span class="bo-tx">ถนน</span></label>
         <label class="base-opt"><input type="radio" name="base" value="dark"><span class="bo-ic">🌃</span><span class="bo-tx">โหมดมืด</span></label>
       </div>
     </div>
@@ -296,7 +298,7 @@ L.control.zoom({position:'bottomright'}).addTo(map);
 const osm=L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'});
 const googleHybrid=L.tileLayer('https://{s}.google.com/vt/lyrs=s,h&x={x}&y={y}&z={z}',{maxZoom:20,subdomains:['mt0','mt1','mt2','mt3'],attribution:'© Google Maps'});
 const esriDark=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}',{maxZoom:16,attribution:'© Esri'});
-osm.addTo(map);
+googleHybrid.addTo(map);
 map.fitBounds(DEFAULT_BOUNDS);
 setTimeout(()=>{ if(typeof userMoved!=='undefined'&&userMoved) return; if(typeof ALL!=='undefined'&&ALL.some(c=>c.lat!=null)) fitAll(); else { map.invalidateSize(); map.fitBounds(DEFAULT_BOUNDS); } },500);
 L.control.scale({imperial:false,position:'bottomleft'}).addTo(map);
