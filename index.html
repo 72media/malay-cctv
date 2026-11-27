@@ -1,0 +1,613 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>KL-CCTV · กล้องสถานการณ์น้ำ กัวลาลัมเปอร์ / สลังงอร์</title>
+<meta name="theme-color" content="#0284c7">
+<meta name="description" content="กล้อง CCTV ภาพนิ่งบนแผนที่ จาก JPS สลังงอร์ (กัวลาลัมเปอร์ มาเลเซีย)">
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css">
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Sarabun:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+<style>
+  :root {
+    --line:#e2e8f0; --txt:#1e293b; --muted:#64748b;
+    --brand:#0ea5e9; --brand-dark:#0284c7;
+    --shadow-sm:0 1px 3px rgba(0,0,0,.05); --shadow-md:0 4px 6px -1px rgba(0,0,0,.08); --shadow-lg:0 10px 15px -3px rgba(0,0,0,.08);
+    --app-h:100vh;
+  }
+  * { box-sizing:border-box; }
+  html,body { height:100%; margin:0; overflow:hidden; overscroll-behavior:none; }
+  body { font-family:'Inter','Sarabun',sans-serif; color:var(--txt); background:#f1f5f9; }
+  #app { display:flex; height:100%; position:relative; overflow:hidden; }
+
+  /* Sidebar */
+  #sidebar { width:380px; flex:0 0 380px; background:#fff; border-right:1px solid var(--line); display:flex; flex-direction:column; z-index:1000; transition:margin-left .35s cubic-bezier(.4,0,.2,1); box-shadow:var(--shadow-lg); height:100%; overflow:hidden; }
+  #sidebar.collapsed { margin-left:-380px; }
+  #top-panel { flex-shrink:0; max-height:600px; transition:max-height .3s ease-in-out; overflow:hidden; }
+  #top-panel.hidden { max-height:0; }
+  #sidebar header { padding:16px 20px; background:linear-gradient(135deg,var(--brand-dark),var(--brand)); color:#fff; display:flex; flex-direction:column; gap:8px; }
+  .hd-top { display:flex; align-items:center; justify-content:space-between; gap:10px; min-height:34px; }
+  #clock { font-size:13px; font-weight:500; opacity:.92; }
+  #sidebar header h1 { font-size:26px; line-height:1.1; margin:0; font-weight:800; letter-spacing:.5px; }
+  .hd-sub { font-size:12.5px; opacity:.92; }
+  #refresh { background:rgba(255,255,255,.2); border:1px solid rgba(255,255,255,.3); color:#fff; border-radius:8px; padding:6px 12px; font-size:13px; font-weight:600; cursor:pointer; white-space:nowrap; }
+  #refresh:hover { background:rgba(255,255,255,.3); }
+  #refresh:disabled { opacity:.6; cursor:wait; }
+
+  .action-bar { padding:12px 16px; border-bottom:1px solid var(--line); display:flex; flex-direction:column; gap:8px; }
+  .btn-action { display:flex; align-items:center; justify-content:center; gap:8px; width:100%; padding:10px; border:none; border-radius:10px; font-size:14px; font-weight:600; cursor:pointer; box-shadow:var(--shadow-md); transition:transform .2s; color:#fff; text-decoration:none; }
+  .btn-action:hover { transform:translateY(-1px); }
+  .btn-teal { background:linear-gradient(135deg,#14b8a6,#0d9488); }
+  .btn-indigo { background:linear-gradient(135deg,#6366f1,#4f46e5); }
+  .btn-teal .bw-icon { font-size:26px; line-height:1; }
+  .btn-teal .bw-text { display:flex; flex-direction:column; align-items:flex-start; line-height:1.25; text-align:left; }
+  .btn-teal .bw-sub { font-size:12px; font-weight:500; opacity:.95; }
+
+  #toggle-top-panel { width:100%; padding:10px; background:#f1f5f9; border:none; border-bottom:1px solid var(--line); color:var(--muted); font-weight:600; cursor:pointer; font-size:13px; flex-shrink:0; }
+  #toggle-top-panel:hover { background:#e2e8f0; }
+
+  .toolbar { flex-shrink:0; padding:12px 16px 8px; display:flex; gap:10px; align-items:center; background:#fff; }
+  .search-box { position:relative; flex:1; }
+  .search-box svg { position:absolute; left:12px; top:50%; transform:translateY(-50%); width:16px; height:16px; color:var(--muted); }
+  #q { -webkit-appearance:none; appearance:none; width:100%; padding:10px 12px 10px 36px; border:1px solid var(--line); border-radius:12px; font-size:14px; outline:none; background:#f8fafc; }
+  #q::-webkit-search-decoration,#q::-webkit-search-cancel-button { -webkit-appearance:none; display:none; }
+  #q:focus { border-color:var(--brand); background:#fff; box-shadow:0 0 0 3px rgba(14,165,233,.15); }
+  #count { font-size:13px; font-weight:600; color:var(--brand-dark); white-space:nowrap; cursor:pointer; padding:8px 14px; background:#e0f2fe; border-radius:20px; flex-shrink:0; }
+  #count:hover { background:#bae6fd; }
+  .filter-row { padding:0 16px 10px; background:#fff; border-bottom:1px solid var(--line); flex-shrink:0; }
+  #district { width:100%; padding:9px 10px; border:1px solid var(--line); border-radius:10px; font-size:13.5px; background:#f8fafc; font-family:inherit; color:var(--txt); }
+
+  #list { list-style:none; margin:0; padding:12px 12px 24px; flex:1 1 auto; min-height:0; overflow-y:auto; overflow-x:hidden; background:#f8fafc; -webkit-overflow-scrolling:touch; overscroll-behavior-y:contain; }
+  .cam-item { display:flex; gap:12px; padding:10px; border-radius:12px; cursor:pointer; align-items:center; background:#fff; border:1px solid var(--line); margin-bottom:8px; box-shadow:var(--shadow-sm); transition:.2s; }
+  .cam-item:hover { transform:translateY(-2px); box-shadow:var(--shadow-md); }
+  .cam-item .thumb { width:72px; height:52px; object-fit:cover; border-radius:8px; background:#e2e8f0; flex:0 0 72px; }
+  .cam-item .meta { min-width:0; flex:1; }
+  .cam-item .name { font-size:14px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .cam-item .sub { font-size:12px; color:var(--muted); display:flex; align-items:center; gap:6px; margin-top:6px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .dot { width:8px; height:8px; border-radius:50%; display:inline-block; flex:0 0 auto; }
+  .empty { padding:28px 20px; text-align:center; color:var(--muted); font-size:13.5px; line-height:1.6; }
+  .empty code { display:block; margin-top:8px; padding:8px; background:#fee2e2; color:#991b1b; border-radius:8px; font-size:11.5px; text-align:left; word-break:break-all; }
+  .legend { padding:12px; font-size:12px; color:var(--muted); display:flex; gap:16px; background:#fff; border-top:1px solid var(--line); flex-wrap:wrap; flex-shrink:0; }
+
+  #sidebar-toggle { position:absolute; top:16px; left:392px; z-index:1100; width:36px; height:36px; border-radius:10px; border:1px solid var(--line); background:#fff; color:var(--txt); box-shadow:var(--shadow-md); cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:16px; font-weight:bold; transition:left .35s; }
+  #sidebar-toggle.collapsed { left:16px; }
+
+  /* Map */
+  #map-wrapper { flex:1; min-width:0; position:relative; }
+  #map { width:100%; height:100%; z-index:1; }
+  .leaflet-bottom.leaflet-right .leaflet-control-zoom { margin-bottom:40px; border:none; box-shadow:var(--shadow-md); }
+  .leaflet-bottom.leaflet-right .leaflet-control-zoom a { border-radius:8px; color:var(--txt); background:#fff; border:none; margin-bottom:4px; font-weight:bold; }
+
+  .layer-btn { position:absolute; top:16px; right:16px; z-index:1000; width:44px; height:44px; background:#fff; border-radius:8px; box-shadow:0 2px 8px rgba(0,0,0,.2); display:flex; align-items:center; justify-content:center; cursor:pointer; font-size:20px; }
+  .reset-btn { position:absolute; top:16px; right:70px; z-index:1000; height:44px; padding:0 14px; background:#fff; border-radius:8px; box-shadow:0 2px 8px rgba(0,0,0,.2); display:flex; align-items:center; gap:6px; cursor:pointer; font-size:14px; font-weight:700; color:var(--brand-dark); font-family:inherit; border:none; white-space:nowrap; }
+  .reset-btn:hover,.layer-btn:hover { background:#f0f9ff; }
+  .layer-panel { position:absolute; top:70px; right:16px; z-index:1000; background:#fff; width:260px; max-width:calc(100vw - 32px); border-radius:16px; box-shadow:0 4px 12px rgba(0,0,0,.2); padding:16px; display:none; flex-direction:column; gap:12px; max-height:calc(100% - 90px); overflow-y:auto; }
+  .layer-panel.active { display:flex; }
+  .layer-header { display:flex; justify-content:space-between; align-items:center; padding-bottom:8px; border-bottom:1px solid var(--line); }
+  .layer-header strong { font-size:16px; font-weight:800; }
+  .layer-close { width:30px; height:30px; border-radius:50%; background:#f1f5f9; border:none; font-size:14px; color:var(--muted); cursor:pointer; }
+  .layer-panel h4 { margin:4px 0 -4px; font-size:11px; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); }
+  .base-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; }
+  .base-opt { position:relative; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px; padding:10px 4px; border:1.5px solid #e2e8f0; border-radius:12px; background:#f8fafc; text-align:center; cursor:pointer; }
+  .base-opt input { position:absolute; opacity:0; pointer-events:none; }
+  .base-opt .bo-ic { font-size:22px; line-height:1; }
+  .base-opt .bo-tx { font-size:12px; font-weight:700; color:#475569; }
+  .base-opt:has(input:checked) { border-color:var(--brand-dark); background:#f0f9ff; box-shadow:0 0 0 3px rgba(14,165,233,.18); }
+  .base-opt:has(input:checked) .bo-tx { color:var(--brand-dark); }
+
+  /* Popup */
+  .leaflet-popup-content { margin:12px; width:280px !important; font-family:'Inter','Sarabun',sans-serif; }
+  .pop-title { font-weight:700; font-size:15px; line-height:1.3; margin-bottom:6px; padding-right:14px; }
+  .pop-img { width:100%; border-radius:8px; display:block; background:#e2e8f0; cursor:zoom-in; aspect-ratio:16/9; object-fit:cover; }
+  .pop-img:hover { opacity:.9; }
+  .pop-meta { display:flex; align-items:center; flex-wrap:wrap; gap:4px 8px; margin-top:8px; }
+  .pop-sub { display:flex; flex-wrap:wrap; gap:2px 10px; margin-top:4px; font-size:11.5px; color:var(--muted); }
+  .badge { color:#fff; font-size:11px; padding:4px 10px; border-radius:20px; font-weight:600; }
+  .code { font-size:12px; color:var(--muted); font-weight:600; }
+  .pop-time { font-size:12.5px; color:#374151; }
+  .pop-btn-wrap { display:flex; gap:8px; margin-top:12px; }
+  .pop-btn { display:flex; align-items:center; justify-content:center; flex:1; padding:8px 10px; border-radius:8px; background:var(--brand); color:#fff; text-decoration:none; font-size:13px; font-weight:600; border:none; cursor:pointer; }
+  .leaflet-container a.pop-btn,.leaflet-container a.pop-btn:hover { color:#fff; }
+  .pop-btn:hover { background:var(--brand-dark); }
+  .pop-btn.sv-btn { background:#16a34a; } .pop-btn.sv-btn:hover { background:#15803d; }
+  .gistda-note { font-size:11px; color:var(--muted); text-align:center; margin-top:4px; }
+
+  .leaflet-popup.meteo-popup .leaflet-popup-content { width:min(88vw,560px) !important; margin:12px; }
+  .meteo-img-box { background:#0b1220; border-radius:8px; overflow:hidden; min-height:120px; display:flex; align-items:center; justify-content:center; color:#cbd5e1; font-size:13px; text-align:center; }
+  .meteo-img-box img { width:100%; height:auto; display:block; cursor:zoom-in; }
+
+  /* Overlays */
+  .full-overlay { position:absolute; inset:0; background:#0f172a; z-index:2000; display:flex; flex-direction:column; opacity:0; pointer-events:none; transition:opacity .3s; }
+  .full-overlay.active { opacity:1; pointer-events:auto; }
+  .overlay-header { background:#fff; padding:16px 24px; display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid var(--line); }
+  .overlay-header h2 { margin:0; font-size:18px; font-weight:700; }
+  .btn-close { background:#f1f5f9; border:none; width:36px; height:36px; border-radius:50%; font-size:18px; font-weight:bold; color:var(--muted); cursor:pointer; }
+  .grid-container { display:grid; grid-template-columns:repeat(4,1fr); grid-template-rows:repeat(2,1fr); gap:12px; padding:20px; flex:1; min-height:0; background:#0f172a; overflow-y:auto; }
+  .grid-item { background:#1e293b; border-radius:12px; overflow:hidden; position:relative; cursor:pointer; border:1px solid #334155; transition:transform .2s; min-height:120px; }
+  .grid-item:hover { transform:scale(1.02); border-color:var(--brand); }
+  .grid-item img { width:100%; height:100%; object-fit:cover; opacity:.9; }
+  .grid-item .grid-info { position:absolute; bottom:0; left:0; right:0; background:linear-gradient(to top,rgba(0,0,0,.9),transparent); padding:16px 12px 10px; color:#fff; }
+  .grid-item .g-title { font-size:14px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .grid-item .g-code { font-size:12px; opacity:.8; display:flex; align-items:center; gap:6px; }
+  .pagination { min-height:72px; display:flex; align-items:center; justify-content:center; gap:6px; background:#fff; border-top:1px solid var(--line); flex-wrap:wrap; padding:8px; }
+  .page-btn { padding:8px 14px; border:1px solid var(--line); background:#fff; border-radius:8px; cursor:pointer; font-size:14px; font-weight:600; }
+  .page-btn.active { background:var(--brand); color:#fff; border-color:var(--brand); }
+  .page-btn:disabled { opacity:.5; cursor:not-allowed; }
+
+  .lightbox { display:none; position:fixed; inset:0; z-index:9999; background:rgba(0,0,0,.85); backdrop-filter:blur(5px); align-items:center; justify-content:center; opacity:0; transition:opacity .3s; }
+  .lightbox.active { display:flex; opacity:1; }
+  .lightbox img { max-width:95vw; max-height:90vh; border-radius:8px; box-shadow:0 10px 25px rgba(0,0,0,.5); object-fit:contain; }
+  .lightbox.wide { overflow:auto; -webkit-overflow-scrolling:touch; background:rgba(2,6,23,.8); }
+  .lightbox.wide img { flex:0 0 auto; max-width:none; max-height:none; width:min(96vw,190vh); height:auto; margin:auto; }
+  .lightbox-close { position:fixed; top:20px; right:20px; z-index:2; background:rgba(255,255,255,.2); border:none; color:#fff; width:44px; height:44px; border-radius:50%; font-size:24px; cursor:pointer; }
+  .lb-caption { position:absolute; left:0; right:0; bottom:16px; text-align:center; color:#fff; font-size:14px; font-weight:600; text-shadow:0 1px 4px rgba(0,0,0,.8); pointer-events:none; padding:0 16px; }
+
+  @media (max-width:820px) {
+    html,body { height:var(--app-h); }
+    #app { display:block; height:var(--app-h); }
+    #sidebar { position:fixed; top:0; left:0; width:88%; max-width:380px; flex:none; height:var(--app-h); z-index:2000; transform:translateX(-102%); box-shadow:4px 0 24px rgba(0,0,0,.25); margin-left:0; }
+    #sidebar.collapsed { transform:translateX(-102%); }
+    #sidebar.open { transform:none; }
+    #sidebar-toggle { left:16px !important; z-index:2100; }
+    #sidebar header { padding-left:64px; }
+    #map-wrapper { height:var(--app-h); width:100%; }
+    #top-panel { max-height:55vh; overflow-y:auto; }
+    #top-panel.hidden { max-height:0; }
+    .cam-item:hover { transform:none; }
+    .legend { padding-bottom:calc(12px + env(safe-area-inset-bottom)); }
+    .grid-container { grid-template-columns:repeat(2,1fr); grid-template-rows:repeat(4,1fr); padding:10px; gap:8px; }
+    .lightbox.wide { align-items:flex-start; justify-content:flex-start; }
+    .lightbox.wide img { width:960px; margin:64px 12px 24px; }
+  }
+</style>
+</head>
+<body>
+
+<div id="app">
+  <button id="sidebar-toggle" title="ซ่อน/แสดงแถบด้านข้าง">◀</button>
+
+  <aside id="sidebar">
+    <div id="top-panel">
+      <header>
+        <div class="hd-top">
+          <div id="clock">กำลังโหลดเวลา...</div>
+          <button id="refresh" title="โหลดข้อมูลกล้องใหม่">⟳ โหลดใหม่</button>
+        </div>
+        <h1>KL-CCTV</h1>
+        <div class="hd-sub">กล้องภาพนิ่งสถานการณ์น้ำ กัวลาลัมเปอร์ / สลังงอร์ · JPS Selangor</div>
+      </header>
+      <div class="action-bar">
+        <a class="btn-action btn-indigo" href="https://infobanjirjps.selangor.gov.my/" target="_blank" rel="noopener">🏛️ เว็บต้นทาง InfoBanjir JPS Selangor</a>
+        <button class="btn-action btn-teal" id="btn-weather" onclick="openMeteogram()">
+          <span class="bw-icon" id="bw-icon">🌦️</span>
+          <span class="bw-text"><span>เช็คสภาพอากาศ กัวลาลัมเปอร์</span><span class="bw-sub" id="bw-sub">กำลังโหลดอุณหภูมิ...</span></span>
+        </button>
+      </div>
+    </div>
+    <button id="toggle-top-panel">▲ ซ่อนข้อมูลส่วนบน</button>
+
+    <div class="toolbar">
+      <div class="search-box">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+        <input id="q" type="search" placeholder="ค้นหาชื่อจุด / รหัสกล้อง...">
+      </div>
+      <span id="count" onclick="openMultiview()" title="แตะเพื่อดูทุกกล้องพร้อมกัน">📺 –</span>
+    </div>
+    <div class="filter-row">
+      <select id="district"><option value="">ทุกอำเภอ / เขต (District 1–9)</option></select>
+    </div>
+
+    <ul id="list"></ul>
+
+    <div class="legend">
+      <span><i class="dot" style="background:#16a34a"></i> ปกติ</span>
+      <span><i class="dot" style="background:#9ca3af"></i> ข้อมูลเก่า</span>
+      <span><i class="dot" style="background:#dc2626"></i> ผิดปกติ</span>
+    </div>
+  </aside>
+
+  <div id="map-wrapper">
+    <div id="map"></div>
+    <button class="reset-btn" id="reset-btn" type="button">⤢ ดูทั้งหมด</button>
+    <div class="layer-btn" id="layer-btn">🗺️</div>
+    <div class="layer-panel" id="layer-panel">
+      <div class="layer-header"><strong>ชั้นข้อมูล</strong><button class="layer-close" id="layer-close">✕</button></div>
+      <h4>แผนที่พื้นฐาน</h4>
+      <div class="base-grid">
+        <label class="base-opt"><input type="radio" name="base" value="osm" checked><span class="bo-ic">🗺️</span><span class="bo-tx">ถนน</span></label>
+        <label class="base-opt"><input type="radio" name="base" value="google"><span class="bo-ic">🛰️</span><span class="bo-tx">ดาวเทียม</span></label>
+        <label class="base-opt"><input type="radio" name="base" value="dark"><span class="bo-ic">🌃</span><span class="bo-tx">โหมดมืด</span></label>
+      </div>
+    </div>
+  </div>
+
+  <!-- Multiview Overlay -->
+  <div id="multiview-overlay" class="full-overlay">
+    <div class="overlay-header">
+      <h2>📺 ดูทุกกล้องพร้อมกัน · JPS Selangor</h2>
+      <button class="btn-close" onclick="closeMultiview()">✕</button>
+    </div>
+    <div class="grid-container" id="multiview-grid"></div>
+    <div class="pagination" id="multiview-pagination"></div>
+  </div>
+
+  <!-- Lightbox -->
+  <div id="lightbox" class="lightbox" onclick="closeLightbox(event)">
+    <button class="lightbox-close" onclick="closeLightbox(event)">✕</button>
+    <img id="lightbox-img" src="" alt="Full view" onclick="event.stopPropagation()">
+    <div id="lightbox-caption" class="lb-caption"></div>
+  </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+
+<script>
+/* =========================================================
+   0) VIEWPORT FIX (มือถือ)
+   ========================================================= */
+function setAppHeight(){
+  const h=(window.visualViewport?window.visualViewport.height:window.innerHeight);
+  document.documentElement.style.setProperty('--app-h',Math.round(h)+'px');
+}
+setAppHeight();
+window.addEventListener('resize',setAppHeight);
+window.addEventListener('orientationchange',()=>setTimeout(setAppHeight,200));
+if(window.visualViewport) window.visualViewport.addEventListener('resize',setAppHeight);
+
+/* =========================================================
+   1) CONFIG
+   ========================================================= */
+const API_BASE = 'https://infobanjirjps.selangor.gov.my/JPSAPI/api/CCTVS/GetCCTVsByDistrict/';
+const DISTRICTS = [1,2,3,4,5,6,7,8,9];
+// ตัวกลางบน Cloudflare Pages: functions/api/jps/[id].js (ต่อท้ายด้วยเลข district)
+const PROXY_BASE = '/api/jps/';
+const IMG_PROXY = '';            // เช่น 'https://your-worker.dev/img?u=' ถ้ารูปโหลดตรงไม่ได้
+const STALE_MINUTES = 120;
+const LAT = 3.139, LON = 101.6869;                       // กัวลาลัมเปอร์
+const DEFAULT_BOUNDS = [[2.55,101.15],[3.95,101.98]];    // สลังงอร์ + กัวลาลัมเปอร์
+
+/* =========================================================
+   2) WEATHER (Open-Meteo)
+   ========================================================= */
+const wmo={0:["ฟ้าแจ่มใส","☀️"],1:["ฟ้าโปร่ง","🌤️"],2:["เมฆบางส่วน","⛅"],3:["เมฆครึ้ม","☁️"],45:["หมอก","🌫️"],48:["หมอก","🌫️"],51:["ฝนปรอย","🌧️"],53:["ฝนปรอย","🌧️"],55:["ฝนปรอยหนัก","🌧️"],61:["ฝนเบา","🌧️"],63:["ฝนปานกลาง","🌧️"],65:["ฝนหนัก","🌧️"],80:["ฝนซู่เบา","🌦️"],81:["ฝนซู่","🌦️"],82:["ฝนซู่หนักมาก","⛈️"],95:["พายุฝนฟ้าคะนอง","⛈️"],96:["พายุ+ลูกเห็บ","⛈️"],99:["พายุรุนแรง","⛈️"]};
+async function fetchWeather(){
+  try{
+    const r=await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${LAT}&longitude=${LON}&current_weather=true&timezone=Asia%2FKuala_Lumpur`);
+    if(!r.ok) throw new Error(r.status);
+    const c=(await r.json()).current_weather; if(!c) return;
+    const w=wmo[c.weathercode]||["ไม่ทราบ","🌥️"];
+    document.getElementById('bw-icon').textContent=w[1];
+    document.getElementById('bw-sub').textContent=`${c.temperature}°C · ${w[0]} · ลม ${c.windspeed} กม/ชม`;
+  }catch(e){ document.getElementById('bw-sub').textContent='แตะเพื่อดูกราฟพยากรณ์'; }
+}
+fetchWeather(); setInterval(fetchWeather,10*60*1000);
+
+/* =========================================================
+   3) MAP
+   ========================================================= */
+const map=L.map('map',{zoomControl:false,preferCanvas:true});
+L.control.zoom({position:'bottomright'}).addTo(map);
+const osm=L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'});
+const googleHybrid=L.tileLayer('https://{s}.google.com/vt/lyrs=s,h&x={x}&y={y}&z={z}',{maxZoom:20,subdomains:['mt0','mt1','mt2','mt3'],attribution:'© Google Maps'});
+const esriDark=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}',{maxZoom:16,attribution:'© Esri'});
+osm.addTo(map);
+map.fitBounds(DEFAULT_BOUNDS);
+setTimeout(()=>{map.invalidateSize();map.fitBounds(DEFAULT_BOUNDS);},500);
+L.control.scale({imperial:false,position:'bottomleft'}).addTo(map);
+const cluster=L.markerClusterGroup({showCoverageOnHover:false,maxClusterRadius:50,disableClusteringAtZoom:16}).addTo(map);
+
+const layerPanel=document.getElementById('layer-panel');
+document.getElementById('layer-btn').addEventListener('click',()=>layerPanel.classList.toggle('active'));
+document.getElementById('layer-close').addEventListener('click',()=>layerPanel.classList.remove('active'));
+document.getElementById('reset-btn').addEventListener('click',()=>{
+  map.closePopup(); map.invalidateSize();
+  const pts=ALL.filter(c=>c.lat!=null).map(c=>[c.lat,c.lng]);
+  map.flyToBounds(pts.length>1?L.latLngBounds(pts).pad(.1):DEFAULT_BOUNDS,{duration:.6});
+});
+document.querySelectorAll('input[name="base"]').forEach(r=>r.addEventListener('change',e=>{
+  [osm,googleHybrid,esriDark].forEach(l=>map.removeLayer(l));
+  ({osm,google:googleHybrid,dark:esriDark})[e.target.value].addTo(map);
+}));
+
+/* =========================================================
+   4) HELPERS
+   ========================================================= */
+const esc=s=>String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+const ICONS={};
+function pinIcon(color){
+  if(!ICONS[color]) ICONS[color]=L.divIcon({className:'cam-pin',html:`<div style="width:18px;height:18px;border-radius:50%;background:${color};border:3px solid #fff;box-shadow:0 0 0 2px rgba(0,0,0,.18),0 2px 6px rgba(0,0,0,.35);"></div>`,iconSize:[18,18],iconAnchor:[9,9],popupAnchor:[0,-10]});
+  return ICONS[color];
+}
+function parseDate(s){
+  if(!s) return null;
+  if(typeof s==='number'){ const d=new Date(s>1e11?s:s*1000); return isNaN(d)?null:d; }
+  let t=String(s).trim();
+  let m=t.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})[ T]?(\d{1,2})?:?(\d{2})?:?(\d{2})?/);   // dd/mm/yyyy hh:mm
+  if(m) return new Date(+m[3],m[2]-1,+m[1],+(m[4]||0),+(m[5]||0),+(m[6]||0));
+  t=t.replace(' ','T'); if(/T\d{2}:\d{2}/.test(t)&&!/(Z|[+\-]\d{2}:?\d{2})$/.test(t)) t+='+08:00';
+  const d=new Date(t); return isNaN(d)?null:d;
+}
+function fmtTime(d){
+  if(!d) return {date:'',time:''};
+  return {date:d.toLocaleDateString('th-TH',{day:'numeric',month:'short',year:'2-digit',timeZone:'Asia/Kuala_Lumpur'}),
+          time:d.toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit',timeZone:'Asia/Kuala_Lumpur'})};
+}
+function statusOf(c){
+  if(c.statusMsg) return {color:'#dc2626',label:c.statusMsg};
+  const d=c.dt; if(d&&(Date.now()-d.getTime())/60000>STALE_MINUTES) return {color:'#9ca3af',label:'ข้อมูลไม่อัปเดต'};
+  return {color:'#16a34a',label:'ปกติ'};
+}
+function imgUrl(c,bust){
+  if(!c.photo) return '';
+  let u=c.photo;
+  if(bust){ u+=(u.includes('?')?'&':'?')+'t='+Date.now(); }
+  return IMG_PROXY?IMG_PROXY+encodeURIComponent(u):u;
+}
+
+function openLightbox(url,caption){
+  const lb=document.getElementById('lightbox');
+  document.getElementById('lightbox-img').src=url;
+  document.getElementById('lightbox-caption').textContent=caption||'';
+  lb.classList.add('active');
+}
+function closeLightbox(e){
+  if(e) e.stopPropagation();
+  const lb=document.getElementById('lightbox');
+  lb.classList.remove('active','wide');
+  document.getElementById('lightbox-img').src='';
+  document.getElementById('lightbox-caption').textContent='';
+}
+
+/* =========================================================
+   5) อ่านข้อมูลจาก API (เดาชื่อฟิลด์ได้หลายแบบ)
+   ========================================================= */
+function findArray(j){
+  if(Array.isArray(j)) return j;
+  if(j&&typeof j==='object'){
+    for(const k of ['data','Data','items','result','results','cctvs','CCTVs','value']){ if(Array.isArray(j[k])) return j[k]; }
+    for(const k in j){ if(Array.isArray(j[k])) return j[k]; if(j[k]&&typeof j[k]==='object'){ const a=findArray(j[k]); if(a.length) return a; } }
+  }
+  return [];
+}
+function getKey(o,names){
+  const lower={}; Object.keys(o).forEach(k=>lower[k.toLowerCase()]=k);
+  for(const n of names){ const k=lower[n.toLowerCase()]; if(k!==undefined && o[k]!==null && o[k]!=='') return o[k]; }
+  return null;
+}
+function toAbs(u){
+  if(!u) return '';
+  u=String(u).trim();
+  if(/^https?:\/\//i.test(u)) return u.replace(/^http:\/\/(infobanjirjps\.selangor\.gov\.my)/i,'https://$1');
+  if(u.startsWith('//')) return 'https:'+u;
+  return 'https://infobanjirjps.selangor.gov.my'+(u.startsWith('/')?'':'/')+u;
+}
+function normalize(x,district){
+  const num=v=>{ const n=parseFloat(v); return Number.isFinite(n)?n:null; };
+  let lat=num(getKey(x,['latitude','lat','latDecimal','y','cctvLatitude']));
+  let lng=num(getKey(x,['longitude','lng','lon','long','longDecimal','x','cctvLongitude']));
+  if(lat===0&&lng===0){ lat=null; lng=null; }       // 0,0 = กล้องที่ยังไม่ได้ใส่พิกัด
+  if(lat!=null&&lng!=null&&(lat>90||lat<-90)){ const t=lat; lat=lng; lng=t; }
+  let photo=getKey(x,['imageUrl','imageURL','image','imgUrl','img','photo','snapshot','snapshotUrl','cctvImage','cctvUrl','url','link','path','imagePath','filename']);
+  if(!photo&&!('imageUrl' in x)){ photo=Object.values(x).find(v=>typeof v==='string'&&/\.(jpe?g|png|gif)(\?|$)|snapshot|image/i.test(v))||''; }
+  const rawTime=getKey(x,['lastUpdate','lastUpdated','updatedDate','updateDate','dateTime','datetime','timestamp','date','capturedAt','createdDate','recordDate']);
+  const dt=parseDate(rawTime); const ft=fmtTime(dt);
+  const name=getKey(x,['cameraName','cctvName','name','title','stationName','locationName','location','lokasi','description','cctvLocation','siteName'])||'ไม่ระบุชื่อ';
+  const code=getKey(x,['cctvCode','code','stationId','stationID','cctvId','cctvID','id','no','ID'])||'';
+  const dName=getKey(x,['districtName','district','daerah'])||('District '+district);
+  const status=(x.isOnline===false?'ออฟไลน์':null)||getKey(x,['statusMsg','statusMessage','remarks','remark']);
+  return {
+    id:String(code)+'|'+String(name), code:String(code), title:String(name), district:String(dName), districtNo:district,
+    lat,lng, photo:toAbs(photo), dt, date:ft.date, time:ft.time,
+    statusMsg:(status&&String(status).trim())||'', river:[getKey(x,['mainRiverBasin','riverName','river','sungai']),getKey(x,['subRiverBasin'])].filter(Boolean).join(' / '), disabled:x.isEnabled===false, offline:x.isOnline===false, brand:x.cameraBrand||'', marker:null
+  };
+}
+
+/* =========================================================
+   6) POPUP
+   ========================================================= */
+function popupHtml(c){
+  const st=statusOf(c);
+  const btns=[];
+  if(c.lat!=null){
+    btns.push(`<a class="pop-btn sv-btn" href="https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${c.lat},${c.lng}" target="_blank" rel="noopener">🧭 Street View</a>`);
+    btns.push(`<a class="pop-btn" href="https://www.google.com/maps?q=${c.lat},${c.lng}" target="_blank" rel="noopener">📍 เปิดใน Maps</a>`);
+  }
+  const coord=c.lat!=null?`<span>📍 ${c.lat.toFixed(5)}, ${c.lng.toFixed(5)}</span>`:'';
+  return `<div class="pop">
+    <div class="pop-title">${esc(c.title)}</div>
+    ${c.photo?`<img class="pop-img" src="${esc(imgUrl(c,true))}" data-full="${esc(imgUrl(c,true))}" onclick="openLightbox(this.dataset.full,this.alt)" alt="${esc(c.title)}" onerror="this.style.display='none'">`:'<div class="gistda-note">ไม่พบลิงก์ภาพของกล้องนี้</div>'}
+    <div class="pop-meta"><span class="badge" style="background:${st.color}">${esc(st.label)}</span>${c.code?`<span class="code">${esc(c.code)}</span>`:''}${c.date?`<span class="pop-time">🕒 ${esc(c.date)} ${esc(c.time)} น.</span>`:''}</div>
+    <div class="pop-sub"><span>🏷️ ${esc(c.district)}</span>${c.river?`<span>🌊 ${esc(c.river)}</span>`:''}${coord}</div>
+    ${btns.length?`<div class="pop-btn-wrap">${btns.join('')}</div>`:''}
+  </div>`;
+}
+
+/* =========================================================
+   7) RENDER
+   ========================================================= */
+let ALL=[], currentPage=1; const itemsPerPage=8;
+let FILTERED=[];
+
+function render(items){
+  ALL=items;
+  ALL.forEach(c=>{
+    if(c.lat==null||c.lng==null) return;
+    c.marker=L.marker([c.lat,c.lng],{icon:pinIcon(statusOf(c).color),title:c.title,riseOnHover:true})
+      .bindPopup(popupHtml(c),{maxWidth:320,keepInView:true,autoPanPaddingTopLeft:[16,84],autoPanPaddingBottomRight:[16,16]});
+    c.marker.on('popupopen',e=>{ const img=e.popup.getElement()?.querySelector('.pop-img'); if(img&&c.photo) img.src=imgUrl(c,true); });
+  });
+  fillDistricts();
+  applyFilter();
+  const pts=ALL.filter(c=>c.lat!=null).map(c=>[c.lat,c.lng]);
+  if(pts.length&&!render.fitted){ map.fitBounds(L.latLngBounds(pts).pad(.1)); render.fitted=true; }
+}
+
+function fillDistricts(){
+  const sel=document.getElementById('district'); const cur=sel.value;
+  const names=[...new Set(ALL.map(c=>c.district))].sort((a,b)=>a.localeCompare(b,undefined,{numeric:true}));
+  sel.innerHTML='<option value="">ทุกอำเภอ / เขต</option>'+names.map(n=>`<option value="${esc(n)}">${esc(n)} (${ALL.filter(c=>c.district===n).length})</option>`).join('');
+  sel.value=names.includes(cur)?cur:'';
+}
+
+function buildList(list){
+  const ul=document.getElementById('list'); ul.innerHTML='';
+  if(!list.length){
+    ul.innerHTML=LOAD_ERR?`<li class="empty">โหลดข้อมูลกล้องไม่สำเร็จ<code>${esc(LOAD_ERR)}</code><br>ลองกด “โหลดใหม่” หรือดูหมายเหตุเรื่อง CORS ในโค้ด (ค่า PROXY_BASE)</li>`:'<li class="empty">ไม่พบกล้องที่ตรงกับคำค้น</li>';
+    return;
+  }
+  const frag=document.createDocumentFragment();
+  list.forEach(c=>{
+    const st=statusOf(c); const li=document.createElement('li'); li.className='cam-item';
+    li.innerHTML=`${c.photo?`<img class="thumb" loading="lazy" src="${esc(imgUrl(c,false))}" onerror="this.style.visibility='hidden'">`:'<div class="thumb"></div>'}<div class="meta"><div class="name">${esc(c.title)}</div><div class="sub"><i class="dot" style="background:${st.color}"></i>${esc(c.district)}${c.time?' · '+esc(c.time)+' น.':''}</div></div>`;
+    li.addEventListener('click',()=>focusCam(c)); frag.appendChild(li);
+  });
+  ul.appendChild(frag);
+}
+
+function applyFilter(){
+  const s=document.getElementById('q').value.trim().toLowerCase();
+  const d=document.getElementById('district').value;
+  FILTERED=ALL.filter(c=>(!d||c.district===d)&&(!s||(c.title+' '+c.code+' '+c.district+' '+c.river).toLowerCase().includes(s)));
+  cluster.clearLayers(); FILTERED.forEach(c=>{ if(c.marker) cluster.addLayer(c.marker); });
+  buildList(FILTERED);
+  document.getElementById('count').textContent='📺 '+((s||d)?FILTERED.length+'/'+ALL.length:ALL.length)+' กล้อง';
+}
+
+function closeSidebarMobile(){
+  if(window.innerWidth<=820){
+    document.getElementById('sidebar').classList.remove('open');
+    const tb=document.getElementById('sidebar-toggle'); tb.classList.add('collapsed'); tb.textContent='☰';
+  }
+}
+function focusCam(c){
+  closeSidebarMobile();
+  if(!c.marker){ alert('กล้องนี้ไม่มีพิกัดบนแผนที่'); return; }
+  cluster.zoomToShowLayer(c.marker,()=>{ map.flyTo(c.marker.getLatLng(),Math.max(map.getZoom(),16),{duration:.6}); setTimeout(()=>c.marker.openPopup(),700); });
+}
+
+/* =========================================================
+   8) METEOGRAM (Yr – กัวลาลัมเปอร์)
+   ========================================================= */
+const METEO_URL='https://www.yr.no/en/content/2-1735161/meteogram.svg?mode=dark';
+let meteoPopup=null;
+function meteoPopupHtml(){
+  return `<div class="meteo-pop"><div class="pop-title">🌦️ พยากรณ์อากาศ กัวลาลัมเปอร์</div>
+    <div class="meteo-img-box"><img src="${METEO_URL}" alt="meteogram" onclick="openMeteoFull()" onerror="this.parentNode.textContent='โหลดกราฟไม่สำเร็จ กรุณาลองใหม่อีกครั้ง'"></div>
+    <div class="gistda-note">แตะภาพเพื่อขยาย · ข้อมูลจาก Yr (NRK / สถาบันอุตุนิยมวิทยานอร์เวย์)</div></div>`;
+}
+function openMeteogram(){
+  closeSidebarMobile();
+  if(!meteoPopup) meteoPopup=L.popup({maxWidth:560,minWidth:260,className:'meteo-popup',autoPanPadding:[12,70],closeOnClick:false}).setContent(meteoPopupHtml());
+  meteoPopup.setLatLng([LAT,LON]); map.closePopup();
+  map.flyTo([LAT,LON],Math.max(map.getZoom(),10),{duration:.6});
+  setTimeout(()=>meteoPopup.openOn(map),650);
+}
+function openMeteoFull(){
+  const lb=document.getElementById('lightbox');
+  document.getElementById('lightbox-img').src=METEO_URL;
+  lb.classList.add('active','wide'); lb.scrollTop=0; lb.scrollLeft=0;
+}
+
+/* =========================================================
+   9) LOAD CAMS (district 1–9 พร้อมกัน)
+   ========================================================= */
+let LOAD_ERR='';
+async function fetchDistrict(n){
+  const urls=[PROXY_BASE+n, API_BASE+n];   // ใช้ตัวกลางของเว็บเราก่อน (Cloudflare Pages Function) ถ้าไม่มี (เช่นรันในเครื่อง) ค่อยเรียกตรง
+  let lastErr;
+  for(const u of urls){
+    try{
+      const res=await fetch(u+(u.includes('?')?'&':'?')+'t='+Date.now(),{cache:'no-store'});
+      if(!res.ok) throw new Error('HTTP '+res.status);
+      let j=await res.json();
+      if(typeof j==='string'){ try{ j=JSON.parse(j); }catch(_){} }
+      return findArray(j).map(x=>normalize(x,n));
+    }catch(e){ lastErr=e; }
+  }
+  throw new Error('district '+n+': '+(lastErr&&lastErr.message||'ผิดพลาด'));
+}
+async function loadCams(){
+  const btn=document.getElementById('refresh'); btn.disabled=true; btn.textContent='⏳ โหลด';
+  try{
+    const results=await Promise.allSettled(DISTRICTS.map(fetchDistrict));
+    const items=[]; const errs=[];
+    results.forEach(r=>{ if(r.status==='fulfilled') items.push(...r.value); else errs.push(r.reason.message); });
+    // กันซ้ำ (กล้องเดียวกันอาจอยู่หลายเขต)
+    const seen=new Set(); const uniq=items.filter(c=>{ if(c.disabled) return false; const k=c.id+'|'+c.lat+'|'+c.lng; if(seen.has(k)) return false; seen.add(k); return true; });
+    if(!uniq.length) throw new Error(errs[0]||'ไม่พบข้อมูลกล้อง (Failed to fetch อาจเกิดจาก CORS)');
+    LOAD_ERR=errs.length?('บางเขตโหลดไม่สำเร็จ: '+errs.join(' | ')):'';
+    if(errs.length) console.warn(LOAD_ERR);
+    console.info('โหลดกล้อง',uniq.length,'ตัว · ตัวอย่างข้อมูลที่แปลงแล้ว:',uniq[0]);
+    render(uniq);
+  }catch(e){
+    console.warn('Cam API Error:',e.message);
+    LOAD_ERR=e.message;
+    if(!ALL.length) render([]);
+  }finally{ btn.disabled=false; btn.textContent='⟳ โหลดใหม่'; }
+}
+
+/* =========================================================
+   10) MULTIVIEW & CLOCK
+   ========================================================= */
+function openMultiview(){ if(!FILTERED.length) return; currentPage=1; renderMultiview(); document.getElementById('multiview-overlay').classList.add('active'); }
+function closeMultiview(){ document.getElementById('multiview-overlay').classList.remove('active'); }
+const ERR_IMG='data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMDAlIiBoZWlnaHQ9IjEwMCUiPjxyZWN0IHdpZHRoPSIxMDAlIiBoZWlnaHQ9IjEwMCUiIGZpbGw9IiMzMzQiLz48dGV4dCB4PSI1MCUiIHk9IjUwJSIgZmlsbD0iI2ZmZiIgZm9udC1zaXplPSIxNCIgdGV4dC1hbmNob3I9Im1pZGRsZSI+RXJyb3I8L3RleHQ+PC9zdmc+';
+function renderMultiview(){
+  const grid=document.getElementById('multiview-grid'); grid.innerHTML='';
+  const start=(currentPage-1)*itemsPerPage;
+  FILTERED.slice(start,start+itemsPerPage).forEach(c=>{
+    const st=statusOf(c); const div=document.createElement('div'); div.className='grid-item';
+    div.onclick=()=>{ if(c.photo) openLightbox(imgUrl(c,true),c.title+' · '+c.district+(c.time?' · '+c.time+' น.':'')); else { closeMultiview(); focusCam(c); } };
+    div.innerHTML=`${c.photo?`<img src="${esc(imgUrl(c,true))}" loading="lazy" onerror="this.onerror=null;this.src='${ERR_IMG}'">`:''}<div class="grid-info"><div class="g-title">${esc(c.title)}</div><div class="g-code"><i class="dot" style="background:${st.color}"></i>${esc(c.district)}${c.time?' · '+esc(c.time)+' น.':''}</div></div>`;
+    grid.appendChild(div);
+  });
+  renderPagination();
+}
+function renderPagination(){
+  const pag=document.getElementById('multiview-pagination'); pag.innerHTML='';
+  const total=Math.max(1,Math.ceil(FILTERED.length/itemsPerPage));
+  const mk=(t,fn,dis,act)=>{ const b=document.createElement('button'); b.className='page-btn'+(act?' active':''); b.textContent=t; b.disabled=!!dis; b.onclick=fn; pag.appendChild(b); };
+  mk('◀ ก่อนหน้า',()=>{ currentPage--; renderMultiview(); },currentPage===1);
+  // แสดงเลขหน้าเป็นช่วง (กันปุ่มเยอะเกินเมื่อกล้องหลายร้อยตัว)
+  const lo=Math.max(1,currentPage-2), hi=Math.min(total,currentPage+2);
+  if(lo>1) mk('1',()=>{ currentPage=1; renderMultiview(); });
+  if(lo>2){ const s=document.createElement('span'); s.textContent='…'; pag.appendChild(s); }
+  for(let i=lo;i<=hi;i++) mk(String(i),()=>{ currentPage=i; renderMultiview(); },false,i===currentPage);
+  if(hi<total-1){ const s=document.createElement('span'); s.textContent='…'; pag.appendChild(s); }
+  if(hi<total) mk(String(total),()=>{ currentPage=total; renderMultiview(); });
+  mk('ถัดไป ▶',()=>{ currentPage++; renderMultiview(); },currentPage===total);
+}
+function updateClock(){
+  document.getElementById('clock').textContent=new Date().toLocaleString('th-TH',{weekday:'short',day:'numeric',month:'short',year:'2-digit',hour:'2-digit',minute:'2-digit',timeZone:'Asia/Kuala_Lumpur'})+' น. (เวลามาเลเซีย)';
+}
+
+/* =========================================================
+   11) INIT & EVENTS
+   ========================================================= */
+const sidebar=document.getElementById('sidebar'), toggleBtn=document.getElementById('sidebar-toggle');
+toggleBtn.addEventListener('click',()=>{
+  if(window.innerWidth<=820){ sidebar.classList.toggle('open'); toggleBtn.classList.toggle('collapsed'); toggleBtn.textContent=sidebar.classList.contains('open')?'◀':'☰'; }
+  else{ sidebar.classList.toggle('collapsed'); toggleBtn.classList.toggle('collapsed'); toggleBtn.textContent=sidebar.classList.contains('collapsed')?'▶':'◀'; setTimeout(()=>map.invalidateSize(),350); }
+});
+if(window.innerWidth<=820){ toggleBtn.textContent='☰'; toggleBtn.classList.add('collapsed'); }
+
+const topPanel=document.getElementById('top-panel'), toggleTopBtn=document.getElementById('toggle-top-panel');
+toggleTopBtn.addEventListener('click',()=>{
+  const hid=topPanel.classList.toggle('hidden');
+  toggleTopBtn.textContent=hid?'▼ แสดงข้อมูลส่วนบน':'▲ ซ่อนข้อมูลส่วนบน';
+});
+if(window.innerWidth<=820){ topPanel.classList.add('hidden'); toggleTopBtn.textContent='▼ แสดงข้อมูลส่วนบน'; }
+
+document.getElementById('q').addEventListener('input',applyFilter);
+document.getElementById('district').addEventListener('change',applyFilter);
+document.getElementById('refresh').addEventListener('click',loadCams);
+
+loadCams(); updateClock(); setInterval(updateClock,1000); setInterval(loadCams,3*60*1000);
+</script>
+</body>
+</html>
