@@ -3,9 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
-<title>KL-CCTV · กล้องสถานการณ์น้ำ กัวลาลัมเปอร์ / สลังงอร์</title>
+<title>Selangor-CCTV · กล้องสถานการณ์น้ำ รัฐสลังงอร์</title>
 <meta name="theme-color" content="#0284c7">
-<meta name="description" content="กล้อง CCTV ภาพนิ่งบนแผนที่ จาก JPS สลังงอร์ (กัวลาลัมเปอร์ มาเลเซีย)">
+<meta name="description" content="กล้อง CCTV ภาพนิ่งสถานการณ์น้ำบนแผนที่ รัฐสลังงอร์ มาเลเซีย จาก InfoBanjir JPS Selangor">
 
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css">
@@ -177,8 +177,8 @@
           <div id="clock">กำลังโหลดเวลา...</div>
           <button id="refresh" title="โหลดข้อมูลกล้องใหม่">⟳ โหลดใหม่</button>
         </div>
-        <h1>KL-CCTV</h1>
-        <div class="hd-sub">กล้องภาพนิ่งสถานการณ์น้ำ กัวลาลัมเปอร์ / สลังงอร์ · JPS Selangor</div>
+        <h1>Selangor-CCTV</h1>
+        <div class="hd-sub">กล้องภาพนิ่งสถานการณ์น้ำ รัฐสลังงอร์ (มาเลเซีย) · JPS Selangor</div>
       </header>
       <div class="action-bar">
         <a class="btn-action btn-indigo" href="https://infobanjirjps.selangor.gov.my/" target="_blank" rel="noopener">🏛️ เว็บต้นทาง InfoBanjir JPS Selangor</a>
@@ -269,7 +269,8 @@ const PROXY_BASE = '/api/jps/';
 const IMG_PROXY = '';            // เช่น 'https://your-worker.dev/img?u=' ถ้ารูปโหลดตรงไม่ได้
 const STALE_MINUTES = 120;
 const LAT = 3.139, LON = 101.6869;                       // กัวลาลัมเปอร์
-const DEFAULT_BOUNDS = [[2.55,101.15],[3.95,101.98]];    // สลังงอร์ + กัวลาลัมเปอร์
+const COORD_FIX = {};   // แก้พิกัดรายกล้อง ใส่ id เป็นคีย์ เช่น {1288:[3.4167,101.1833]}
+const DEFAULT_BOUNDS = [[2.55,101.15],[3.95,101.98]];    // รัฐสลังงอร์
 
 /* =========================================================
    2) WEATHER (Open-Meteo)
@@ -297,7 +298,7 @@ const googleHybrid=L.tileLayer('https://{s}.google.com/vt/lyrs=s,h&x={x}&y={y}&z
 const esriDark=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}',{maxZoom:16,attribution:'© Esri'});
 osm.addTo(map);
 map.fitBounds(DEFAULT_BOUNDS);
-setTimeout(()=>{map.invalidateSize();map.fitBounds(DEFAULT_BOUNDS);},500);
+setTimeout(()=>{ if(typeof userMoved!=='undefined'&&userMoved) return; if(typeof ALL!=='undefined'&&ALL.some(c=>c.lat!=null)) fitAll(); else { map.invalidateSize(); map.fitBounds(DEFAULT_BOUNDS); } },500);
 L.control.scale({imperial:false,position:'bottomleft'}).addTo(map);
 const cluster=L.markerClusterGroup({showCoverageOnHover:false,maxClusterRadius:50,disableClusteringAtZoom:16}).addTo(map);
 
@@ -390,7 +391,7 @@ function normalize(x,district){
   const num=v=>{ const n=parseFloat(v); return Number.isFinite(n)?n:null; };
   let lat=num(getKey(x,['latitude','lat','latDecimal','y','cctvLatitude']));
   let lng=num(getKey(x,['longitude','lng','lon','long','longDecimal','x','cctvLongitude']));
-  if(lat===0&&lng===0){ lat=null; lng=null; }       // 0,0 = กล้องที่ยังไม่ได้ใส่พิกัด
+  if(lat===0&&lng===0){ lat=null; lng=null; } if(COORD_FIX[x.id]){ lat=COORD_FIX[x.id][0]; lng=COORD_FIX[x.id][1]; }       // 0,0 = กล้องที่ยังไม่ได้ใส่พิกัด
   if(lat!=null&&lng!=null&&(lat>90||lat<-90)){ const t=lat; lat=lng; lng=t; }
   let photo=getKey(x,['imageUrl','imageURL','image','imgUrl','img','photo','snapshot','snapshotUrl','cctvImage','cctvUrl','url','link','path','imagePath','filename']);
   if(!photo&&!('imageUrl' in x)){ photo=Object.values(x).find(v=>typeof v==='string'&&/\.(jpe?g|png|gif)(\?|$)|snapshot|image/i.test(v))||''; }
@@ -401,9 +402,9 @@ function normalize(x,district){
   const dName=getKey(x,['districtName','district','daerah'])||('District '+district);
   const status=(x.isOnline===false?'ออฟไลน์':null)||getKey(x,['statusMsg','statusMessage','remarks','remark']);
   return {
-    id:String(code)+'|'+String(name), code:String(code), title:String(name), district:String(dName), districtNo:district,
+    id:String(code)+'|'+String(name), code:String(code), title:String(name).trim(), district:String(dName).trim(), districtNo:Number(x.districtId??district),
     lat,lng, photo:toAbs(photo), dt, date:ft.date, time:ft.time,
-    statusMsg:(status&&String(status).trim())||'', river:[getKey(x,['mainRiverBasin','riverName','river','sungai']),getKey(x,['subRiverBasin'])].filter(Boolean).join(' / '), disabled:x.isEnabled===false, offline:x.isOnline===false, brand:x.cameraBrand||'', marker:null
+    statusMsg:(status&&String(status).trim())||'', river:[getKey(x,['mainRiverBasin','riverName','river','sungai']),getKey(x,['subRiverBasin'])].map(v=>String(v).trim()).filter(Boolean).join(' / '), disabled:x.isEnabled===false, offline:x.isOnline===false, brand:x.cameraBrand||'', marker:null
   };
 }
 
@@ -431,6 +432,14 @@ function popupHtml(c){
    7) RENDER
    ========================================================= */
 let ALL=[], currentPage=1; const itemsPerPage=8;
+let userMoved=false;
+['mousedown','touchstart','wheel'].forEach(ev=>document.getElementById('map').addEventListener(ev,()=>{ userMoved=true; },{passive:true}));
+function fitAll(){
+  const pts=ALL.filter(c=>c.lat!=null).map(c=>[c.lat,c.lng]);
+  map.invalidateSize();
+  map.fitBounds(pts.length>1?L.latLngBounds(pts).pad(.08):DEFAULT_BOUNDS);
+}
+window.addEventListener('load',()=>setTimeout(()=>{ if(!userMoved&&ALL.some(c=>c.lat!=null)) fitAll(); },400));
 let FILTERED=[];
 
 function render(items){
@@ -444,12 +453,12 @@ function render(items){
   fillDistricts();
   applyFilter();
   const pts=ALL.filter(c=>c.lat!=null).map(c=>[c.lat,c.lng]);
-  if(pts.length&&!render.fitted){ map.fitBounds(L.latLngBounds(pts).pad(.1)); render.fitted=true; }
+  if(!render.fitted&&pts.length){ fitAll(); render.fitted=true; }
 }
 
 function fillDistricts(){
   const sel=document.getElementById('district'); const cur=sel.value;
-  const names=[...new Set(ALL.map(c=>c.district))].sort((a,b)=>a.localeCompare(b,undefined,{numeric:true}));
+  const no={}; ALL.forEach(c=>{ no[c.district]=Math.min(no[c.district]??99,c.districtNo); }); const names=Object.keys(no).sort((a,b)=>no[a]-no[b]);
   sel.innerHTML='<option value="">ทุกอำเภอ / เขต</option>'+names.map(n=>`<option value="${esc(n)}">${esc(n)} (${ALL.filter(c=>c.district===n).length})</option>`).join('');
   sel.value=names.includes(cur)?cur:'';
 }
@@ -463,7 +472,7 @@ function buildList(list){
   const frag=document.createDocumentFragment();
   list.forEach(c=>{
     const st=statusOf(c); const li=document.createElement('li'); li.className='cam-item';
-    li.innerHTML=`${c.photo?`<img class="thumb" loading="lazy" src="${esc(imgUrl(c,false))}" onerror="this.style.visibility='hidden'">`:'<div class="thumb"></div>'}<div class="meta"><div class="name">${esc(c.title)}</div><div class="sub"><i class="dot" style="background:${st.color}"></i>${esc(c.district)}${c.time?' · '+esc(c.time)+' น.':''}</div></div>`;
+    li.innerHTML=`${c.photo?`<img class="thumb" loading="lazy" src="${esc(imgUrl(c,false))}" onerror="this.style.visibility='hidden'">`:'<div class="thumb"></div>'}<div class="meta"><div class="name">${esc(c.title)}</div><div class="sub"><i class="dot" style="background:${st.color}"></i>${esc(c.district)}${c.time?' · '+esc(c.time)+' น.':''}${c.lat==null?' · ไม่มีพิกัด':''}</div></div>`;
     li.addEventListener('click',()=>focusCam(c)); frag.appendChild(li);
   });
   ul.appendChild(frag);
@@ -486,7 +495,7 @@ function closeSidebarMobile(){
 }
 function focusCam(c){
   closeSidebarMobile();
-  if(!c.marker){ alert('กล้องนี้ไม่มีพิกัดบนแผนที่'); return; }
+  if(!c.marker){ if(c.photo) openLightbox(imgUrl(c,true),c.title+' · '+c.district+' · (กล้องนี้ไม่มีพิกัดบนแผนที่)'); return; }
   cluster.zoomToShowLayer(c.marker,()=>{ map.flyTo(c.marker.getLatLng(),Math.max(map.getZoom(),16),{duration:.6}); setTimeout(()=>c.marker.openPopup(),700); });
 }
 
