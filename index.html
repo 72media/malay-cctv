@@ -453,7 +453,7 @@ function render(items){
   fillDistricts();
   applyFilter();
   const pts=ALL.filter(c=>c.lat!=null).map(c=>[c.lat,c.lng]);
-  if(!render.fitted&&pts.length){ fitAll(); render.fitted=true; }
+  
 }
 
 function fillDistricts(){
@@ -526,36 +526,58 @@ function openMeteoFull(){
    9) LOAD CAMS (district 1–9 พร้อมกัน)
    ========================================================= */
 let LOAD_ERR='';
-async function fetchDistrict(n){
-  const urls=[PROXY_BASE+n, API_BASE+n];   // ใช้ตัวกลางของเว็บเราก่อน (Cloudflare Pages Function) ถ้าไม่มี (เช่นรันในเครื่อง) ค่อยเรียกตรง
-  let lastErr;
-  for(const u of urls){
-    try{
-      const res=await fetch(u+(u.includes('?')?'&':'?')+'t='+Date.now(),{cache:'no-store'});
-      if(!res.ok) throw new Error('HTTP '+res.status);
-      let j=await res.json();
-      if(typeof j==='string'){ try{ j=JSON.parse(j); }catch(_){} }
-      return findArray(j).map(x=>normalize(x,n));
-    }catch(e){ lastErr=e; }
-  }
-  throw new Error('district '+n+': '+(lastErr&&lastErr.message||'ผิดพลาด'));
+const TIMEOUT_MS=12000, CACHE_KEY='selangor-cctv-raw-v1';
+const PROXY_ALL=PROXY_BASE+'all';
+const RAW={};                 // เลขเขต -> ข้อมูลดิบจาก API
+let firstLoadDone=false;
+
+function fetchJSON(u,ms){      // มี timeout: เขตไหนค้างจะไม่ลากทั้งหน้าให้ช้า
+  const ctl=new AbortController(); const t=setTimeout(()=>ctl.abort(),ms);
+  return fetch(u,{signal:ctl.signal}).then(r=>{ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
+    .catch(e=>{ throw (e&&e.name==='AbortError')?new Error('หมดเวลา ('+Math.round(ms/1000)+' วิ)'):e; })
+    .finally(()=>clearTimeout(t));
+}
+async function fetchDistrictRaw(n){
+  try{ return findArray(await fetchJSON(PROXY_BASE+n,TIMEOUT_MS)); }       // ผ่านตัวกลาง (ไม่ใส่ ?t= เพื่อให้ cache ของ Cloudflare ทำงาน)
+  catch(e1){ return findArray(await fetchJSON(API_BASE+n+'?t='+Date.now(),TIMEOUT_MS)); }  // ไม่มีตัวกลาง (เช่นรันในเครื่อง) เรียกตรง
+}
+function buildItems(){
+  const items=[]; Object.keys(RAW).forEach(n=>RAW[n].forEach(x=>items.push(normalize(x,+n))));
+  const seen=new Set();
+  return items.filter(c=>{ if(c.disabled) return false; const k=c.id+'|'+c.lat+'|'+c.lng; if(seen.has(k)) return false; seen.add(k); return true; });
+}
+function saveCache(){ try{ localStorage.setItem(CACHE_KEY,JSON.stringify({t:Date.now(),raw:RAW})); }catch(_){} }
+function loadCache(){   // โชว์ข้อมูลครั้งก่อนทันที แล้วค่อยอัปเดตเป็นข้อมูลใหม่
+  try{
+    const c=JSON.parse(localStorage.getItem(CACHE_KEY)||'null');
+    if(!c||!c.raw||Date.now()-c.t>24*3600*1000) return false;
+    Object.assign(RAW,c.raw); const items=buildItems(); if(!items.length) return false;
+    render(items); if(!userMoved) fitAll(); return true;
+  }catch(_){ return false; }
 }
 async function loadCams(){
   const btn=document.getElementById('refresh'); btn.disabled=true; btn.textContent='⏳ โหลด';
+  const errs=[];
   try{
-    const results=await Promise.allSettled(DISTRICTS.map(fetchDistrict));
-    const items=[]; const errs=[];
-    results.forEach(r=>{ if(r.status==='fulfilled') items.push(...r.value); else errs.push(r.reason.message); });
-    // กันซ้ำ (กล้องเดียวกันอาจอยู่หลายเขต)
-    const seen=new Set(); const uniq=items.filter(c=>{ if(c.disabled) return false; const k=c.id+'|'+c.lat+'|'+c.lng; if(seen.has(k)) return false; seen.add(k); return true; });
-    if(!uniq.length) throw new Error(errs[0]||'ไม่พบข้อมูลกล้อง (Failed to fetch อาจเกิดจาก CORS)');
+    // 1) ขอทุกเขตในครั้งเดียวจากตัวกลาง (เร็วสุด) 2) เขตที่ยังขาด ดึงรายเขตพร้อมกัน แสดงผลทีละเขตที่มาถึง
+    try{
+      const j=await fetchJSON(PROXY_ALL,TIMEOUT_MS);
+      DISTRICTS.forEach(n=>{ if(Array.isArray(j[n])) RAW[n]=j[n]; });
+    }catch(e){ errs.push('all: '+e.message); }
+    const missing=DISTRICTS.filter(n=>!Array.isArray(RAW[n])||!RAW[n].length);
+    if(missing.length<DISTRICTS.length||!ALL.length){ const it=buildItems(); if(it.length) render(it); }
+    await Promise.all(missing.map(async n=>{
+      try{ RAW[n]=await fetchDistrictRaw(n); render(buildItems()); }
+      catch(e){ errs.push('district '+n+': '+e.message); }
+    }));
+    const items=buildItems();
+    if(!items.length) throw new Error(errs[0]||'ไม่พบข้อมูลกล้อง (Failed to fetch อาจเกิดจาก CORS)');
     LOAD_ERR=errs.length?('บางเขตโหลดไม่สำเร็จ: '+errs.join(' | ')):'';
     if(errs.length) console.warn(LOAD_ERR);
-    console.info('โหลดกล้อง',uniq.length,'ตัว · ตัวอย่างข้อมูลที่แปลงแล้ว:',uniq[0]);
-    render(uniq);
+    render(items); saveCache();
+    if(!firstLoadDone){ firstLoadDone=true; if(!userMoved) fitAll(); }
   }catch(e){
-    console.warn('Cam API Error:',e.message);
-    LOAD_ERR=e.message;
+    console.warn('Cam API Error:',e.message); LOAD_ERR=e.message;
     if(!ALL.length) render([]);
   }finally{ btn.disabled=false; btn.textContent='⟳ โหลดใหม่'; }
 }
@@ -616,7 +638,7 @@ document.getElementById('q').addEventListener('input',applyFilter);
 document.getElementById('district').addEventListener('change',applyFilter);
 document.getElementById('refresh').addEventListener('click',loadCams);
 
-loadCams(); updateClock(); setInterval(updateClock,1000); setInterval(loadCams,3*60*1000);
+loadCache(); loadCams(); updateClock(); setInterval(updateClock,1000); setInterval(loadCams,3*60*1000);
 </script>
 </body>
 </html>
